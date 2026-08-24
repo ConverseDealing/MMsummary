@@ -1026,7 +1026,7 @@ async function loadFromStorage(){
     const latestVal = await storageGet(STORE_LATEST);
     const historyVal = await storageGet(STORE_HISTORY);
     const latest = latestVal ? JSON.parse(latestVal) : null;
-    const history = historyVal ? JSON.parse(historyVal) : [];
+    const history = historyVal ? dedupeHistoryByDay(JSON.parse(historyVal)) : [];
     if (latest) {
       destroyCharts();
       render(latest, history);
@@ -1043,6 +1043,16 @@ function showStatus(msg, ok){
   setTimeout(()=>{ el.classList.remove('show'); }, 4500);
 }
 
+// If two uploads land on the same calendar day (e.g. correcting a mistake
+// and re-uploading), keep only the later one for that day — otherwise the
+// earlier, wrong upload would linger in history and get compared against
+// as "last week" until the next real weekly upload replaces it.
+function dedupeHistoryByDay(history){
+  const byDay = new Map();
+  history.forEach(h => { byDay.set(new Date(h.updatedAt).toDateString(), h); });
+  return Array.from(byDay.values());
+}
+
 document.getElementById('fileInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if (!file) return;
@@ -1057,6 +1067,7 @@ document.getElementById('fileInput').addEventListener('change', async (e)=>{
     const histVal = await storageGet(STORE_HISTORY).catch(()=>null);
     let history = histVal ? JSON.parse(histVal) : [];
     history.push(snapshot);
+    history = dedupeHistoryByDay(history);
     if (history.length > 20) history = history.slice(history.length - 20);
     await storageSet(STORE_HISTORY, JSON.stringify(history));
 
